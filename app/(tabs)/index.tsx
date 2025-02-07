@@ -1,40 +1,75 @@
 import { useEffect, useState } from 'react';
-import { Image, Text, View, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
+import { Image, Text, View, SafeAreaView, ScrollView } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import '../../global.css'
+
+const API_URL = 'http://192.168.0.112:8080/get-water-parameters';
+
+/**
+ * Fetch the latest sensor data from the API.
+ * Returns the most recent (first) entry.
+ */
 const fetchSensorData = async () => {
-  return {
-    device: {
-      id: 'C1_PG',
-      location: 'Bataan',
-      battery: '18%',
-      feedAmount: '50 kg',
-      cycles: 4,
-    },
-    sensors: [
-      { label: 'pH Level', value: '8.1', unit: '', icon: 'water-outline', status: 'green' },
-      { label: 'DO', value: '5.33', unit: '', icon: 'cloud-outline', status: 'green' },
-      { label: 'Temperature', value: '23', unit: '°C', icon: 'thermometer-outline', status: 'green' },
-      { label: 'Hydrogen Sulfide', value: '7', unit: '', icon: 'flask-outline', status: 'red' },
-      { label: 'Salinity', value: '35', unit: '', icon: 'water-outline', status: 'green' },
-      { label: 'Turbidity', value: '37', unit: '', icon: 'water-outline', status: 'green' },
-    ],
-  };
+  try {
+    const response = await fetch(API_URL);
+    const data = await response.json();
+
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error('No data received');
+    }
+
+    const latestData = data[0]; // ✅ Get the first (latest) entry
+
+    return {
+      device: {
+        id: latestData.id.toString(),
+        location: 'Bataan', // If API includes location, update here
+        battery: '18%', // If API includes battery, update here
+        feedAmount: '50 kg', // Update based on API data
+        cycles: 4, // Adjust based on API data
+      },
+      sensors: [
+        { label: 'pH Level', value: latestData.ph_level, unit: '', icon: 'water-outline', status: latestData.ph_level < 7 ? 'red' : 'green' },
+        { label: 'Temperature', value: latestData.temperature, unit: '°C', icon: 'thermometer-outline', status: latestData.temperature < 0 ? 'red' : 'green' },
+        { label: 'Hydrogen Sulfide', value: latestData.hydrogen_sulfide_level, unit: '', icon: 'flask-outline', status: latestData.hydrogen_sulfide_level > 5 ? 'red' : 'green' },
+        { label: 'Turbidity', value: latestData.turbidity, unit: '', icon: 'water-outline', status: latestData.turbidity > 100 ? 'red' : 'green' },
+      ],
+    };
+  } catch (error) {
+    console.error('Error fetching sensor data:', error);
+    return null;
+  }
 };
 
 export default function HomeScreen() {
-  const [deviceData, setDeviceData] = useState(null);
-  const [sensorData, setSensorData] = useState([]);
+  const [deviceData, setDeviceData] = useState<any>(null);
+  const [sensorData, setSensorData] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const loadData = async () => {
       const data = await fetchSensorData();
-      setDeviceData(data.device);
-      setSensorData(data.sensors);
+      if (data) {
+        setDeviceData(data.device);
+        setSensorData(data.sensors);
+      }
+      setLoading(false);
     };
+
     loadData();
+    const interval = setInterval(loadData, 5000); // ✅ Auto-refresh every 5 seconds
+
+    return () => clearInterval(interval);
   }, []);
+
+  if (loading) {
+    return (
+      <View className="flex-1 items-center justify-center">
+        <Text className="text-lg font-bold">Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -46,10 +81,7 @@ export default function HomeScreen() {
             <View className="bg-green-500 px-3 py-1 rounded-full">
               <Text className="text-white text-sm">● Connected</Text>
             </View>
-            <Image
-              source={{ uri: 'https://i.pravatar.cc/100' }}
-              className="w-10 h-10 rounded-full"
-            />
+            <Image source={{ uri: 'https://i.pravatar.cc/100' }} className="w-10 h-10 rounded-full" />
           </View>
         </View>
 
@@ -80,8 +112,9 @@ export default function HomeScreen() {
             </View>
           </LinearGradient>
         )}
-          {/* Feed & Cycles */}
-          {deviceData && (
+
+        {/* Feed & Cycles */}
+        {deviceData && (
           <View className="flex-row justify-between mt-4">
             <LinearGradient
               colors={['#065CC7', '#032D61']}
@@ -104,7 +137,7 @@ export default function HomeScreen() {
             </LinearGradient>
           </View>
         )}
-      
+
         {/* Sensor Status */}
         <Text className="text-lg font-semibold mt-6">Sensor Status</Text>
         <View className="flex-row flex-wrap justify-between mt-2">
@@ -113,8 +146,8 @@ export default function HomeScreen() {
               key={index}
               className="bg-gray-100 p-4 rounded-lg mt-5"
               style={{
-                width: '48%',  // ✅ Fixes grid wrapping issue
-                aspectRatio: 1.3, // ✅ Ensures consistent height across all devices
+                width: '48%', 
+                aspectRatio: 1.3, 
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
